@@ -1,0 +1,1282 @@
+
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Horror Countdown</title>
+
+  <style>
+:root {
+  --screen-darkness: 0.7;
+
+  --digit-color: rgba(195, 18, 18, 0.9);
+  --digit-glow: rgba(160, 0, 0, 0.9);
+  --digit-dark-glow: rgba(90, 0, 0, 0.7);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: #000;
+  color: #ddd;
+  font-family: "Courier New", monospace;
+}
+
+body {
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  user-select: none;
+}
+
+/* =========================================================
+   画面全体
+   ========================================================= */
+
+.scene {
+  position: relative;
+  isolation: isolate;
+
+  display: grid;
+  place-items: center;
+
+  width: 100%;
+  height: 100%;
+
+  overflow: hidden;
+  background: #000;
+
+  /*
+   * scene全体へfilterを掛けると、
+   * 動画、数字、暗幕のすべてが同時に暗くなるため削除。
+   */
+}
+
+/* =========================================================
+   MP4背景
+   ========================================================= */
+
+.background-video {
+  position: absolute;
+  z-index: 0;
+
+  top: 0;
+  left: 0;
+
+  width: 100%;
+  height: 100%;
+
+  object-fit: cover;
+  object-position: center;
+
+  opacity: 1;
+  visibility: visible;
+  display: block;
+
+  filter:
+    contrast(1.08)
+    brightness(0.88)
+    saturate(0.75);
+
+  pointer-events: none;
+}
+
+/* 背景動画を暗くするレイヤー */
+.video-darkener {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+
+  background: rgba(0, 0, 0, 0.25);
+
+  pointer-events: none;
+}
+
+.content {
+  position: relative;
+  z-index: 5;
+}
+
+/* =========================================================
+   VHS走査線
+   ========================================================= */
+
+.scene::before {
+  content: "";
+
+  position: absolute;
+  z-index: 10;
+  inset: 0;
+
+  pointer-events: none;
+
+  background:
+    repeating-linear-gradient(
+      to bottom,
+      rgba(255, 255, 255, 0.025) 0,
+      rgba(255, 255, 255, 0.025) 1px,
+      rgba(0, 0, 0, 0.16) 2px,
+      rgba(0, 0, 0, 0.16) 4px
+    );
+
+  mix-blend-mode: screen;
+
+  animation:
+    scanlines 0.13s linear infinite;
+}
+
+/* =========================================================
+   VHSノイズ
+   ========================================================= */
+
+.scene::after {
+  content: "";
+
+  position: absolute;
+  z-index: 11;
+  inset: -30%;
+
+  pointer-events: none;
+
+  opacity: 0.11;
+
+  background-image:
+    radial-gradient(
+      circle at 20% 30%,
+      #fff 0 0.5px,
+      transparent 0.8px
+    ),
+    radial-gradient(
+      circle at 80% 70%,
+      #fff 0 0.5px,
+      transparent 0.8px
+    );
+
+  background-size:
+    4px 5px,
+    6px 7px;
+
+  animation:
+    noise 0.12s steps(2, end) infinite;
+}
+
+/* =========================================================
+   周辺減光
+   ========================================================= */
+
+.vignette {
+  position: absolute;
+  z-index: 9;
+  inset: 0;
+
+  pointer-events: none;
+
+  background:
+    radial-gradient(
+      ellipse at center,
+      transparent 25%,
+      rgba(0, 0, 0, 0.34) 60%,
+      rgba(0, 0, 0, 0.92) 100%
+    );
+}
+
+/* =========================================================
+   VHSトラッキングライン
+   ========================================================= */
+
+.tracking-line {
+  position: absolute;
+  z-index: 12;
+
+  top: -15%;
+  left: 0;
+
+  width: 100%;
+  height: 11%;
+
+  pointer-events: none;
+
+  opacity: 0.22;
+
+  background:
+    linear-gradient(
+      to bottom,
+      transparent,
+      rgba(255, 255, 255, 0.23),
+      rgba(0, 0, 0, 0.48),
+      transparent
+    );
+
+  filter: blur(2px);
+
+  animation:
+    tracking 7s linear infinite;
+}
+
+/* =========================================================
+   前面コンテンツ
+   ========================================================= */
+
+.content {
+  position: relative;
+  z-index: 5;
+
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+
+  gap: clamp(28px, 4vh, 52px);
+
+  width: 100%;
+  max-width: 100vw;
+
+  padding: clamp(16px, 2vw, 36px);
+
+  text-align: center;
+}
+
+/* =========================================================
+   メッセージ・操作説明
+   ========================================================= */
+
+.message,
+.guide {
+  margin: 0;
+
+  color: rgba(225, 225, 225, 0.78);
+
+  font-weight: normal;
+  letter-spacing: 0.38em;
+  text-indent: 0.38em;
+
+  text-shadow:
+    2px 0 rgba(255, 0, 0, 0.25),
+    -2px 0 rgba(0, 135, 255, 0.25);
+}
+
+.message {
+  font-size:
+    clamp(0.8rem, 1.2vw, 1.35rem);
+
+  animation:
+    titleFlicker 4.8s infinite;
+}
+
+.guide {
+  font-size:
+    clamp(0.58rem, 0.8vw, 0.9rem);
+
+  opacity: 0.48;
+}
+
+/* =========================================================
+   タイマー全体
+   ========================================================= */
+
+.timer-wrap {
+  position: relative;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  width: 100%;
+  max-width: 100vw;
+}
+
+.timer {
+  position: relative;
+
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+
+  /*
+   * 数字同士の間隔。
+   * 画像側に余白が大きい場合は小さくする。
+   */
+  gap: clamp(3px, 0.45vw, 9px);
+
+  width: max-content;
+  max-width: calc(100vw - 32px);
+
+  min-height:
+    clamp(180px, 33.33vh, 360px);
+
+  filter:
+    drop-shadow(
+      0 0 18px
+      rgba(110, 0, 0, 0.82)
+    );
+}
+
+/* =========================================================
+   通常数字
+   FHD時は最大216×360px
+   ========================================================= */
+
+.digit {
+  display: block;
+
+  flex: 0 0 auto;
+
+  width:
+    clamp(
+      74px,
+      11.25vw,
+      216px
+    );
+
+  height:
+    clamp(
+      123px,
+      33.33vh,
+      360px
+    );
+
+  object-fit: contain;
+  object-position: center bottom;
+
+  pointer-events: none;
+  user-select: none;
+
+  -webkit-user-drag: none;
+}
+
+/* =========================================================
+   ミリ秒グループ
+   ========================================================= */
+
+.fraction-group {
+  display: flex;
+
+  flex: 0 0 auto;
+
+  align-items: flex-end;
+  justify-content: center;
+
+  gap:
+    clamp(
+      2px,
+      0.3vw,
+      6px
+    );
+}
+
+/*
+ * ミリ秒の数字。
+ * 通常数字の約2/3の大きさ。
+ *
+ * FHD時は最大144×240px。
+ */
+.digit.fraction {
+  width:
+    clamp(
+      49px,
+      7.5vw,
+      144px
+    );
+
+  height:
+    clamp(
+      82px,
+      22.22vh,
+      240px
+    );
+}
+
+/* =========================================================
+   コロン
+   フォント文字ではなく2個の円で描画
+   ========================================================= */
+
+.separator {
+  position: relative;
+
+  display: block;
+
+  flex: 0 0 auto;
+
+  /*
+   * 通常数字と同じ高さを確保する。
+   * これによって上下の点を数字に対して配置できる。
+   */
+  width:
+    clamp(
+      24px,
+      3.5vw,
+      67px
+    );
+
+  height:
+    clamp(
+      123px,
+      33.33vh,
+      360px
+    );
+
+  /*
+   * HTML内の「:」そのものは透明にする。
+   */
+  overflow: visible;
+
+  color: transparent;
+  font-size: 0;
+  line-height: 0;
+
+  text-shadow: none;
+
+  animation:
+    separatorBlink 1s steps(1, end) infinite;
+}
+
+.separator::before,
+.separator::after {
+  content: "";
+
+  position: absolute;
+  left: 50%;
+
+  width:
+    clamp(
+      8px,
+      0.85vw,
+      16px
+    );
+
+  height:
+    clamp(
+      8px,
+      0.85vw,
+      16px
+    );
+
+  border-radius: 50%;
+
+  background:
+    var(--digit-color);
+
+  box-shadow:
+    0 0 10px var(--digit-glow),
+    0 0 22px var(--digit-dark-glow);
+
+  transform:
+    translateX(-50%);
+}
+
+/*
+ * コロン上側の点。
+ * 数字画像に合わせて調整する場合はtopを変更する。
+ */
+.separator::before {
+  top: 34%;
+}
+
+/*
+ * コロン下側の点。
+ */
+.separator::after {
+  top: 62%;
+}
+
+/* =========================================================
+   小数点
+   ========================================================= */
+
+.decimal-point {
+  position: relative;
+
+  display: block;
+
+  flex: 0 0 auto;
+
+  width:
+    clamp(
+      12px,
+      1.3vw,
+      25px
+    );
+
+  /*
+   * ミリ秒数字と同じ高さ。
+   */
+  height:
+    clamp(
+      82px,
+      22.22vh,
+      240px
+    );
+
+  overflow: visible;
+
+  color: transparent;
+  font-size: 0;
+  line-height: 0;
+
+  text-shadow: none;
+}
+
+.decimal-point::after {
+  content: "";
+
+  position: absolute;
+
+  left: 50%;
+  bottom:
+    clamp(
+      5px,
+      0.8vh,
+      10px
+    );
+
+  width:
+    clamp(
+      7px,
+      0.75vw,
+      14px
+    );
+
+  height:
+    clamp(
+      7px,
+      0.75vw,
+      14px
+    );
+
+  border-radius: 50%;
+
+  background:
+    var(--digit-color);
+
+  box-shadow:
+    0 0 9px var(--digit-glow),
+    0 0 18px var(--digit-dark-glow);
+
+  transform:
+    translateX(-50%);
+}
+
+/* =========================================================
+   数字グリッチ
+   ========================================================= */
+
+.timer.glitch {
+  animation:
+    timerGlitch 0.18s steps(2, end) 1;
+}
+
+.timer.glitch::before,
+.timer.glitch::after {
+  content: "";
+
+  position: absolute;
+
+  inset: 15% -3%;
+
+  pointer-events: none;
+}
+
+.timer.glitch::before {
+  border-top:
+    3px solid rgba(208, 0, 0, 0.54);
+
+  transform:
+    translateX(12px);
+}
+
+.timer.glitch::after {
+  top: 56%;
+  bottom: auto;
+
+  border-top:
+    2px solid rgba(40, 121, 150, 0.5);
+
+  transform:
+    translateX(-15px);
+}
+
+/* =========================================================
+   カウントダウン実行中
+   数字以外を非表示
+   ========================================================= */
+
+.scene.running .message,
+.scene.running .guide {
+  display: none;
+}
+
+.scene.running .content {
+  gap: 0;
+}
+
+/* =========================================================
+   残り時間が少ない場合
+   ========================================================= */
+
+.scene.danger {
+  animation:
+    dangerPulse 1.25s ease-in-out infinite;
+}
+
+/* =========================================================
+   カウント終了
+   ========================================================= */
+
+.scene.finished {
+  filter:
+    invert(1)
+    contrast(1.6)
+    brightness(0.9);
+
+  animation:
+    finalFlash 0.16s steps(2, end) 5;
+}
+
+.scene.finished .content {
+  animation:
+    finalShake 0.09s steps(2, end) infinite;
+}
+
+/* =========================================================
+   アニメーション
+   ========================================================= */
+
+@keyframes scanlines {
+  from {
+    transform: translateY(0);
+  }
+
+  to {
+    transform: translateY(4px);
+  }
+}
+
+@keyframes noise {
+  0% {
+    transform: translate(0, 0);
+  }
+
+  25% {
+    transform: translate(-2%, 2%);
+  }
+
+  50% {
+    transform: translate(2%, -1%);
+  }
+
+  75% {
+    transform: translate(1%, 2%);
+  }
+
+  100% {
+    transform: translate(-1%, -2%);
+  }
+}
+
+@keyframes tracking {
+  from {
+    transform: translateY(0);
+  }
+
+  to {
+    transform: translateY(1100%);
+  }
+}
+
+@keyframes separatorBlink {
+  0%,
+  48% {
+    opacity: 0.9;
+  }
+
+  49%,
+  100% {
+    opacity: 0.25;
+  }
+}
+
+@keyframes titleFlicker {
+  0%,
+  18%,
+  22%,
+  62%,
+  64%,
+  100% {
+    opacity: 0.82;
+  }
+
+  19%,
+  21%,
+  63% {
+    opacity: 0.18;
+  }
+}
+
+@keyframes timerGlitch {
+  0% {
+    transform: translate(0);
+    filter: hue-rotate(0deg);
+  }
+
+  25% {
+    transform:
+      translate(-7px, 2px)
+      skewX(3deg);
+  }
+
+  50% {
+    transform:
+      translate(8px, -2px)
+      skewX(-4deg);
+
+    filter:
+      hue-rotate(35deg);
+  }
+
+  75% {
+    transform:
+      translate(-3px, 1px);
+  }
+
+  100% {
+    transform:
+      translate(0);
+  }
+}
+
+@keyframes dangerPulse {
+  0%,
+  100% {
+    filter:
+      contrast(1.12)
+      brightness(0.68)
+      saturate(0.72);
+  }
+
+  50% {
+    filter:
+      contrast(1.35)
+      brightness(0.86)
+      saturate(1.12);
+  }
+}
+
+@keyframes finalFlash {
+  from {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0.42;
+  }
+}
+
+@keyframes finalShake {
+  0% {
+    transform: translate(-5px, 2px);
+  }
+
+  50% {
+    transform: translate(4px, -3px);
+  }
+
+  100% {
+    transform: translate(2px, 4px);
+  }
+}
+
+/* =========================================================
+   横幅が狭い画面
+   ========================================================= */
+
+@media (max-aspect-ratio: 4 / 3) {
+  .timer {
+    gap:
+      clamp(
+        2px,
+        0.25vw,
+        5px
+      );
+  }
+
+  .digit {
+    width:
+      clamp(
+        54px,
+        10vw,
+        150px
+      );
+
+    height:
+      clamp(
+        90px,
+        28vh,
+        250px
+      );
+  }
+
+  .digit.fraction {
+    width:
+      clamp(
+        36px,
+        6.67vw,
+        100px
+      );
+
+    height:
+      clamp(
+        60px,
+        18.67vh,
+        167px
+      );
+  }
+
+  .separator {
+    width:
+      clamp(
+        20px,
+        3vw,
+        45px
+      );
+
+    height:
+      clamp(
+        90px,
+        28vh,
+        250px
+      );
+  }
+
+  .decimal-point {
+    height:
+      clamp(
+        60px,
+        18.67vh,
+        167px
+      );
+  }
+}
+
+/* =========================================================
+   アニメーション軽減設定
+   ========================================================= */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
+  </style>
+</head>
+
+<body>
+  <main class="scene" id="scene">
+    <video
+      class="background-video"
+      id="backgroundVideo"
+      autoplay
+      muted
+      loop
+      playsinline
+      preload="auto"
+      aria-hidden="true"
+    >
+      <source src="assets/video/vhs-background.mp4" type="video/mp4">
+    </video>
+
+    <div class="video-darkener"></div>
+    <div class="vignette"></div>
+    <div class="tracking-line"></div>
+
+    <section class="content">
+      <h1 class="message" id="message">CLICK OR SPACE TO START</h1>
+
+      <div class="timer-wrap">
+        <div class="timer" id="timer" aria-label="Countdown timer">
+          <img class="digit" src="assets/digits/0.png" alt="0">
+          <img class="digit" src="assets/digits/5.png" alt="5">
+          <span class="separator" aria-hidden="true">:</span>
+          <img class="digit" src="assets/digits/0.png" alt="0">
+          <img class="digit" src="assets/digits/0.png" alt="0">
+
+          <span class="fraction-group">
+            <span class="decimal-point" aria-hidden="true">.</span>
+            <img class="digit fraction" src="assets/digits/0.png" alt="0">
+            <img class="digit fraction" src="assets/digits/0.png" alt="0">
+            <img class="digit fraction" src="assets/digits/0.png" alt="0">
+          </span>
+        </div>
+      </div>
+
+      <p class="guide">T : SET TIME / CLICK OR SPACE : START OR ABORT</p>
+    </section>
+  </main>
+
+  <audio id="soundStart" src="assets/audio/start.ogg" preload="auto"></audio>
+  <audio id="soundAbort" src="assets/audio/abort.ogg" preload="auto"></audio>
+  <audio id="soundFinish" src="assets/audio/finish.ogg" preload="auto"></audio>
+  <audio id="soundTick" src="assets/audio/tick.ogg" preload="auto"></audio>
+
+  <script>
+    "use strict";
+
+    const DEFAULT_TIME_MS = 5 * 60 * 1000;
+    const MIN_TIME_MS = 1000;
+    const MAX_TIME_MS = 99 * 60 * 1000 + 59 * 1000 + 999;
+    const DANGER_TIME_MS = 30 * 1000;
+    const DIGIT_PATH = "assets/digits/";
+
+    const scene = document.getElementById("scene");
+    const timer = document.getElementById("timer");
+    const message = document.getElementById("message");
+    const backgroundVideo = document.getElementById("backgroundVideo");
+    const digitElements = Array.from(document.querySelectorAll(".digit"));
+
+    const sounds = {
+      start: document.getElementById("soundStart"),
+      abort: document.getElementById("soundAbort"),
+      finish: document.getElementById("soundFinish"),
+      tick: document.getElementById("soundTick")
+    };
+
+    let configuredTimeMs = DEFAULT_TIME_MS;
+    let remainingTimeMs = DEFAULT_TIME_MS;
+    let endTime = 0;
+    let animationId = null;
+    let running = false;
+    let lastTickSecond = null;
+
+    function digitSource(number) {
+      return DIGIT_PATH + String(number) + ".png";
+    }
+
+    function playSound(audio) {
+      audio.pause();
+      audio.currentTime = 0;
+      audio.play().catch(function () {
+        // The browser may block audio before a user gesture.
+      });
+    }
+
+    function stopAllSounds() {
+      Object.values(sounds).forEach(function (audio) {
+        audio.pause();
+        audio.currentTime = 0;
+      });
+    }
+
+    function render() {
+      const safeMs = Math.max(0, Math.ceil(remainingTimeMs));
+      const minutes = Math.floor(safeMs / 60000);
+      const seconds = Math.floor(safeMs / 1000) % 60;
+      const milliseconds = safeMs % 1000;
+
+      const displayText =
+        String(Math.min(minutes, 99)).padStart(2, "0") +
+        String(seconds).padStart(2, "0") +
+        String(milliseconds).padStart(3, "0");
+
+      digitElements.forEach(function (element, index) {
+        const digit = displayText.charAt(index);
+
+        if (element.alt !== digit) {
+          element.src = digitSource(digit);
+          element.alt = digit;
+        }
+      });
+
+      timer.setAttribute(
+        "aria-label",
+        "Remaining time " +
+          String(minutes) +
+          " minutes " +
+          String(seconds) +
+          "." +
+          String(milliseconds).padStart(3, "0") +
+          " seconds"
+      );
+
+      scene.classList.toggle(
+        "danger",
+        running && remainingTimeMs <= DANGER_TIME_MS && remainingTimeMs > 0
+      );
+    }
+
+    function updateCountdown() {
+      if (!running) {
+        return;
+      }
+
+      remainingTimeMs = Math.max(0, endTime - performance.now());
+
+      const currentWholeSecond = Math.ceil(remainingTimeMs / 1000);
+
+      if (
+        currentWholeSecond !== lastTickSecond &&
+        remainingTimeMs > 0
+      ) {
+        lastTickSecond = currentWholeSecond;
+        playSound(sounds.tick);
+      }
+
+      render();
+
+      if (remainingTimeMs <= 0) {
+        finishCountdown();
+        return;
+      }
+
+      animationId = requestAnimationFrame(updateCountdown);
+    }
+
+    function startCountdown() {
+      if (running || remainingTimeMs <= 0) {
+        return;
+      }
+
+      stopAllSounds();
+      scene.classList.remove("finished");
+      scene.classList.add("running");
+
+      running = true;
+      endTime = performance.now() + remainingTimeMs;
+      lastTickSecond = Math.ceil(remainingTimeMs / 1000);
+      message.textContent = "COUNTDOWN ACTIVE";
+
+      playSound(sounds.start);
+      animationId = requestAnimationFrame(updateCountdown);
+    }
+
+    function abortCountdown() {
+      if (!running) {
+        return;
+      }
+
+      remainingTimeMs = Math.max(0, endTime - performance.now());
+      running = false;
+
+      if (animationId !== null) {
+        cancelAnimationFrame(animationId);
+        animationId = null;
+      }
+
+      stopAllSounds();
+      scene.classList.remove("danger", "running");
+      message.textContent = "COUNTDOWN ABORTED";
+
+      render();
+      playSound(sounds.abort);
+    }
+
+    function finishCountdown() {
+      running = false;
+      remainingTimeMs = 0;
+      endTime = 0;
+      lastTickSecond = null;
+
+      if (animationId !== null) {
+        cancelAnimationFrame(animationId);
+        animationId = null;
+      }
+
+      stopAllSounds();
+      scene.classList.remove("danger", "running");
+      scene.classList.add("finished");
+      message.textContent = "TIME IS OVER";
+
+      render();
+      playSound(sounds.finish);
+    }
+
+    function toggleCountdown() {
+      if (running) {
+        abortCountdown();
+        return;
+      }
+
+      if (remainingTimeMs > 0) {
+        startCountdown();
+      }
+    }
+
+    function setTime() {
+      if (running) {
+        return;
+      }
+
+      const promptText =
+        "Set the time.\n" +
+        "Examples:\n" +
+        "90 = 90 seconds\n" +
+        "1:30 = 1 minute 30 seconds\n" +
+        "05:00.500 = 5 minutes 0.500 seconds";
+
+      const input = window.prompt(
+        promptText,
+        formatTimeForInput(configuredTimeMs)
+      );
+
+      if (input === null) {
+        return;
+      }
+
+      const parsedMs = parseTimeInput(input.trim());
+
+      if (
+        parsedMs === null ||
+        !Number.isFinite(parsedMs) ||
+        parsedMs < MIN_TIME_MS ||
+        parsedMs > MAX_TIME_MS
+      ) {
+        window.alert("Enter a value from 00:01.000 to 99:59.999.");
+        return;
+      }
+
+      configuredTimeMs = parsedMs;
+      remainingTimeMs = parsedMs;
+      endTime = 0;
+      lastTickSecond = null;
+      running = false;
+
+      if (animationId !== null) {
+        cancelAnimationFrame(animationId);
+        animationId = null;
+      }
+
+      scene.classList.remove("danger", "finished", "running");
+      message.textContent = "TIME SET";
+      render();
+    }
+
+    function parseTimeInput(value) {
+      if (value.length === 0) {
+        return null;
+      }
+
+      if (/^\d+(?:\.\d{1,3})?$/.test(value)) {
+        const totalSeconds = Number(value);
+
+        if (!Number.isFinite(totalSeconds)) {
+          return null;
+        }
+
+        return Math.round(totalSeconds * 1000);
+      }
+
+      const match = value.match(
+        /^(\d{1,2}):(\d{1,2})(?:\.(\d{1,3}))?$/
+      );
+
+      if (match === null) {
+        return null;
+      }
+
+      const minutes = Number(match[1]);
+      const seconds = Number(match[2]);
+      const fractionText = match[3] || "";
+
+      if (
+        !Number.isInteger(minutes) ||
+        !Number.isInteger(seconds) ||
+        seconds < 0 ||
+        seconds >= 60
+      ) {
+        return null;
+      }
+
+      const milliseconds = Number(fractionText.padEnd(3, "0"));
+
+      return (
+        minutes * 60 * 1000 +
+        seconds * 1000 +
+        milliseconds
+      );
+    }
+
+    function formatTimeForInput(milliseconds) {
+      const totalMilliseconds = Math.max(0, Math.round(milliseconds));
+      const minutes = Math.floor(totalMilliseconds / 60000);
+      const seconds = Math.floor(totalMilliseconds / 1000) % 60;
+      const fraction = totalMilliseconds % 1000;
+
+      return (
+        String(minutes).padStart(2, "0") +
+        ":" +
+        String(seconds).padStart(2, "0") +
+        "." +
+        String(fraction).padStart(3, "0")
+      );
+    }
+
+    function triggerRandomGlitch() {
+      if (Math.random() < 0.34) {
+        timer.classList.remove("glitch");
+        void timer.offsetWidth;
+        timer.classList.add("glitch");
+
+        window.setTimeout(function () {
+          timer.classList.remove("glitch");
+        }, 190);
+      }
+
+      window.setTimeout(
+        triggerRandomGlitch,
+        650 + Math.random() * 2400
+      );
+    }
+
+    document.addEventListener("click", function () {
+      toggleCountdown();
+    });
+
+    document.addEventListener("keydown", function (event) {
+      if (event.repeat) {
+        return;
+      }
+
+      if (event.code === "Space") {
+        event.preventDefault();
+        toggleCountdown();
+        return;
+      }
+
+      if (event.code === "KeyT" || event.key.toLowerCase() === "t") {
+        event.preventDefault();
+        event.stopPropagation();
+        setTime();
+      }
+    });
+
+    document.addEventListener("visibilitychange", function () {
+      if (!document.hidden && running) {
+        remainingTimeMs = Math.max(0, endTime - performance.now());
+
+        if (remainingTimeMs <= 0) {
+          finishCountdown();
+        } else {
+          render();
+        }
+      }
+    });
+
+    backgroundVideo.play().catch(function () {
+      // Muted video normally autoplays, but failure is harmless.
+    });
+
+    render();
+    triggerRandomGlitch();
+  </script>
+</body>
+</html>
